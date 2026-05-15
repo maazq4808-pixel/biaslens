@@ -5,11 +5,11 @@ from bias_detection import detect_columns, detect_outcomes, detect_bias
 from explanations import generate_all_explanations
 from report import generate_report
 
-st.title("Hiring Bias Detector")
-st.write("This tool helps HR professionals detect hidden bias in their hiring data. Simply upload a CSV file containing your hiring records and the tool will identify any demographic groups that may be facing unfair treatment in your hiring process.")
+st.title("BiasLens")
+st.write("This tool helps HR professionals detect hidden bias in their hiring data. Simply upload a CSV or Excel file containing your hiring records and the tool will identify any demographic groups that may be facing unfair treatment in your hiring process.")
 st.write("The tool uses the 80% rule for disparate impact, which compares the success rates of different demographic groups. If a group's success rate is less than 80% of the best-performing group, it may indicate potential bias that warrants further investigation.")
 
-uploaded_file = st.file_uploader("upload your dataset here(csv)", type=["csv", "xlsx", "xls", "data"])
+uploaded_file = st.file_uploader("Upload your dataset here (CSV or Excel)", type=["csv", "xlsx", "xls", "data"])
 
 if uploaded_file is not None:
     # Bug fix: the uploader accepts xlsx/xls but pd.read_csv would crash on those formats.
@@ -33,10 +33,11 @@ if uploaded_file is not None:
         outcome_col = outcomes[0]
 
         # Run the 80% rule bias check for every detected demographic column
-        all_findings = []
-        for col in demographic_cols:
-            findings = detect_bias(df, col, outcome_col)
-            all_findings.extend(findings)
+        with st.spinner("Analyzing your dataset for bias..."):
+            all_findings = []
+            for col in demographic_cols:
+                findings = detect_bias(df, col, outcome_col)
+                all_findings.extend(findings)
 
         st.subheader("Bias Charts")
 
@@ -70,12 +71,19 @@ if uploaded_file is not None:
             st.pyplot(fig)
             plt.close(fig)
 
-        all_findings = generate_all_explanations(all_findings)
+        # Generate a plain-English Claude explanation for every finding, then display them
+        with st.spinner("Generating explanations..."):
+            all_findings = generate_all_explanations(all_findings)
+
+        st.subheader("Findings")
         for finding in all_findings:
             st.write(f"**{finding['group']} ({finding['demographic_col']})**")
             st.write(finding["explanation"])
 
-        generate_report(all_findings)
+        # Generate and offer the PDF report for download
+        with st.spinner("Building PDF report..."):
+            generate_report(all_findings)
+
         st.download_button(
             label="Download PDF Report",
             data=open("report.pdf", "rb"),
