@@ -43,36 +43,54 @@ Write a 2-3 sentence plain English explanation of this finding for a non-technic
     return response.content[0].text
 
 def generate_all_explanations(all_findings):
-    # Loop over every finding and attach a plain-English explanation to it.
-    # We modify the dicts in-place by adding an "explanation" key,
-    # then return the same list so callers get back the enriched findings.
-    for i in all_findings:
-        explanation = generate_explanation(i)
-        i["explanation"] = explanation
+    findings_text = ""
+    for i, finding in enumerate(all_findings):
+        findings_text += f"""
+Finding {i+1}:
+- Demographic category: {finding['demographic_col']}
+- Group: {finding['group']}
+- Success rate: {finding['rate']}%
+- Ratio to best-performing group: {finding['ratio']}%
+- Bias detected: {finding['bias_detected']}
+"""
+
+    prompt = f"""You are an HR bias analyst. A hiring dataset was analyzed using the 80% rule for disparate impact.
+
+Here are all the findings:
+{findings_text}
+
+For EACH finding, write a 1-2 sentence plain English explanation for a non-technical HR manager. Be factual, not dramatic. No jargon.
+
+Format your response exactly like this:
+FINDING 1: Your explanation here.
+FINDING 2: Your explanation here.
+And so on for each finding."""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1500,
+        messages=[
+            {"role": "user", "content": prompt}
+        ]
+    )
+
+    response_text = response.content[0].text
+    lines = response_text.strip().split("\n")
+
+    finding_index = 0
+    for line in lines:
+        line = line.strip()
+        if line.startswith("FINDING") and ":" in line:
+            explanation = line.split(":", 1)[1].strip()
+            if finding_index < len(all_findings):
+                all_findings[finding_index]["explanation"] = explanation
+                finding_index += 1
+
+    for finding in all_findings:
+        if "explanation" not in finding:
+            if finding["bias_detected"]:
+                finding["explanation"] = f"{finding['group']} has a success rate of {finding['rate']}%, which is {finding['ratio']}% of the best-performing group. This falls below the 80% threshold and warrants investigation."
+            else:
+                finding["explanation"] = f"{finding['group']} has a success rate of {finding['rate']}%, which is within acceptable range. No bias detected."
 
     return all_findings
-
-
-if __name__ == "__main__":
-    test_findings = [
-        {
-            "group": "Female",
-            "rate": 10.95,
-            "ratio": 33.12,
-            "demographic_col": "sex",
-            "bias_detected": True
-        },
-        {
-            "group": "Male",
-            "rate": 30.57,
-            "ratio": 100.0,
-            "demographic_col": "sex",
-            "bias_detected": False
-        }
-    ]
-
-    results = generate_all_explanations(test_findings)
-
-    for finding in results:
-        print(f"\n--- {finding['group']} ---")
-        print(finding["explanation"])
